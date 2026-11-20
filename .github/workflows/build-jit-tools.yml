@@ -40,7 +40,7 @@ jobs:
         run: |
           rustc --version
           cargo --version
-          cargo build --release --locked --manifest-path win-pairing-tool/Cargo.toml --bin idevice_pair --target x86_64-pc-windows-msvc
+          cargo build --release --manifest-path win-pairing-tool/Cargo.toml --bin idevice_pair --target x86_64-pc-windows-msvc
 
       - name: Verify PE binary and compute SHA-256
         shell: pwsh
