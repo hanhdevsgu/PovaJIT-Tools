@@ -1,0 +1,120 @@
+name: StikDebug
+options:
+  bundleIdPrefix: com.stik
+  deploymentTarget:
+    iOS: "17.4"
+  developmentLanguage: en
+  knownRegions:
+    - en
+    - Base
+    - es
+    - it
+    - zh-Hans
+  defaultConfig: Release
+
+packages:
+  CodeEditorView:
+    url: https://github.com/mchakravarty/CodeEditorView
+    from: "0.15.4"
+
+settings:
+  base:
+    ALWAYS_SEARCH_USER_PATHS: "NO"
+    ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS: "YES"
+    CLANG_ANALYZER_NONNULL: "YES"
+    CLANG_CXX_LANGUAGE_STANDARD: "gnu++20"
+    CLANG_ENABLE_MODULES: "YES"
+    CLANG_ENABLE_OBJC_ARC: "YES"
+    CLANG_ENABLE_OBJC_WEAK: "YES"
+    ENABLE_USER_SCRIPT_SANDBOXING: "YES"
+    GCC_C_LANGUAGE_STANDARD: "gnu17"
+    LOCALIZATION_PREFERS_STRING_CATALOGS: "YES"
+    SWIFT_VERSION: "5.0"
+
+targets:
+  StikDebug:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.4"
+    sources:
+      - path: StikDebug
+        excludes:
+          - "Info.plist"
+          - "StikDebug.entitlements"
+          - "idevice/**"
+    dependencies:
+      - package: CodeEditorView
+        product: CodeEditorView
+      - package: CodeEditorView
+        product: LanguageSupport
+      - sdk: AppIntents.framework
+      - sdk: AVFoundation.framework
+      - sdk: CoreLocation.framework
+      - sdk: Network.framework
+      - sdk: Security.framework
+      - sdk: SwiftUI.framework
+      - sdk: SystemConfiguration.framework
+      - sdk: WidgetKit.framework
+    settings:
+      base:
+        ASSETCATALOG_COMPILER_APPICON_NAME: "AppIcon"
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: "AccentColor"
+        ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS: "NO"
+        CODE_SIGN_ENTITLEMENTS: "StikDebug/StikDebug.entitlements"
+        CODE_SIGN_IDENTITY: ""
+        CODE_SIGNING_ALLOWED: "NO"
+        CODE_SIGNING_REQUIRED: "NO"
+        CURRENT_PROJECT_VERSION: "1"
+        DEVELOPMENT_TEAM: ""
+        GENERATE_INFOPLIST_FILE: "YES"
+        HEADER_SEARCH_PATHS:
+          - "$(inherited)"
+          - "$(PROJECT_DIR)/StikDebug/idevice"
+        INFOPLIST_FILE: "StikDebug/Info.plist"
+        INFOPLIST_KEY_CFBundleDisplayName: "StikDebug"
+        INFOPLIST_KEY_ITSAppUsesNonExemptEncryption: "NO"
+        INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace: "YES"
+        INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription: "StikDebug uses location to stay running in the background and maintain your JIT connection."
+        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: "StikDebug uses location to stay running in the background and maintain your JIT connection."
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: "YES"
+        INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: "YES"
+        INFOPLIST_KEY_UILaunchScreen_Generation: "YES"
+        INFOPLIST_KEY_UIStatusBarStyle: "UIStatusBarStyleDefault"
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: "UIInterfaceOrientationPortrait"
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown"
+        INFOPLIST_KEY_UISupportsDocumentBrowser: "YES"
+        IPHONEOS_DEPLOYMENT_TARGET: "17.4"
+        LD_RUNPATH_SEARCH_PATHS: "@executable_path/Frameworks"
+        LIBRARY_SEARCH_PATHS:
+          - "$(inherited)"
+          - "$(PROJECT_DIR)/StikDebug/idevice"
+        MARKETING_VERSION: "3.2.2"
+        OTHER_LDFLAGS:
+          - "$(inherited)"
+          - "-lidevice_ffi"
+          - "-lc++"
+          - "-lresolv"
+        PRODUCT_BUNDLE_IDENTIFIER: "com.stik.stikdebug"
+        PRODUCT_NAME: "StikDebug"
+        PROVISIONING_PROFILE_SPECIFIER: ""
+        SUPPORTED_PLATFORMS: "iphoneos iphonesimulator"
+        SUPPORTS_MACCATALYST: "NO"
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: "NO"
+        SWIFT_EMIT_LOC_STRINGS: "YES"
+        SWIFT_INCLUDE_PATHS: "$(inherited) $(PROJECT_DIR)/StikDebug/idevice"
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "1,2"
+      configs:
+        Debug:
+          SWIFT_OPTIMIZATION_LEVEL: "-Onone"
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: "DEBUG $(inherited)"
+        Release:
+          SWIFT_COMPILATION_MODE: "wholemodule"
+
+schemes:
+  StikDebug:
+    build:
+      targets:
+        StikDebug: all
+    archive:
+      config: Release

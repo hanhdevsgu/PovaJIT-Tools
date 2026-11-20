@@ -1,0 +1,11 @@
+.DS_Store
+__pycache__/
+staging/
+dist/
+ios-jit-enabler/build/
+ios-jit-enabler/*.ipa
+ios-jit-enabler/*.xcodeproj
+ios-jit-enabler/Payload/
+ios-jit-enabler/StikDebug/idevice/libidevice_ffi.a
+ios-jit-enabler/StikDebug/idevice/idevice.h
+win-pairing-tool/target/

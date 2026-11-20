@@ -1,0 +1,94 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
+mod app;
+mod backend;
+mod known_apps;
+mod logging;
+mod ui;
+
+use eframe::egui;
+
+fn main() -> eframe::Result {
+    let logs = logging::init();
+
+    eframe::run_native(
+        &format!("idevice pair v{}", env!("CARGO_PKG_VERSION")),
+        native_options(),
+        Box::new(|cc| {
+            ui::setup(&cc.egui_ctx);
+            Ok(Box::new(app::App::new(&cc.egui_ctx, logs)))
+        }),
+    )
+}
+
+fn native_options() -> eframe::NativeOptions {
+    let viewport = egui::ViewportBuilder::default().with_inner_size([760.0, 620.0]);
+
+    #[cfg(target_os = "macos")]
+    let viewport = viewport.with_icon(std::sync::Arc::new(egui::IconData::default()));
+
+    #[cfg(not(target_os = "macos"))]
+    let viewport = {
+        let icon = eframe::icon_data::from_png_bytes(include_bytes!("../icon.png"))
+            .expect("bad icon data");
+        viewport.with_icon(std::sync::Arc::new(icon))
+    };
+
+    let mut options = eframe::NativeOptions {
+        viewport,
+        renderer: pick_renderer(),
+        ..Default::default()
+    };
+
+    use eframe::egui_wgpu::WgpuSetup;
+    if let WgpuSetup::CreateNew(setup) = &mut options.wgpu_options.wgpu_setup {
+        let default_device_descriptor = std::sync::Arc::clone(&setup.device_descriptor);
+        setup.device_descriptor = std::sync::Arc::new(move |adapter| {
+            let mut descriptor = default_device_descriptor(adapter);
+
+            // Clamp eframe's requested limits to the adapter's capabilities.
+            // Raspberry Pi 5, for example, supports 4 rather than 8 color attachments.
+            descriptor.required_limits = descriptor
+                .required_limits
+                .or_worse_values_from(&adapter.limits());
+
+            descriptor
+        });
+    }
+
+    options
+}
+
+/// Fall back to OpenGL when Metal fails on Macs patched with OpenCore.
+#[cfg(target_os = "macos")]
+fn pick_renderer() -> eframe::Renderer {
+    use eframe::wgpu;
+
+    let mut descriptor = wgpu::InstanceDescriptor::new_without_display_handle();
+    descriptor.backends = wgpu::Backends::METAL;
+    let instance = wgpu::Instance::new(descriptor);
+
+    let result = pollster::block_on(async {
+        let adapter = instance
+            .request_adapter(&wgpu::RequestAdapterOptions::default())
+            .await
+            .map_err(|e| e.to_string())?;
+        adapter
+            .request_device(&wgpu::DeviceDescriptor::default())
+            .await
+            .map_err(|e| e.to_string())
+    });
+
+    match result {
+        Ok(_) => eframe::Renderer::Wgpu,
+        Err(error) => {
+            tracing::warn!("Metal initialization failed; falling back to OpenGL: {error}");
+            eframe::Renderer::Glow
+        }
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn pick_renderer() -> eframe::Renderer {
+    eframe::Renderer::Wgpu
+}

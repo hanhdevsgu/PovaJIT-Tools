@@ -1,0 +1,46 @@
+[package]
+name = "idevice_pair"
+version = "1.2.0"
+edition = "2024"
+rust-version = "1.95"
+
+[dependencies]
+idevice = { version = "0.1.68", default-features = false, features = [
+  "afc",
+  "core_device_proxy",
+  "house_arrest",
+  "installation_proxy",
+  "mdns",
+  "pair",
+  "remote_pairing",
+  "ring",
+  "rsd",
+  "tcp",
+  "tunnel_tcp_stack",
+  "usbmuxd",
+] }
+eframe = "0.36.2"
+rfd = "0.17"
+tokio = { version = "1.53.2", features = ["rt-multi-thread", "net", "sync", "time"] }
+futures-util = "0.3.34"
+mdns-sd = "0.21"
+uuid = { version = "1.27", features = ["v4"] }
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+dispatch2 = "0.3"
+eframe = { version = "0.36.2", features = ["glow"] }
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", default-features = false, features = ["NSApplication", "NSResponder"] }
+pollster = "1.0"
+
+[target.'cfg(windows)'.build-dependencies]
+winresource = "0.1"
+
+[profile.release]
+codegen-units = 1
+lto = "thin"
+opt-level = "s"
+panic = "abort"
+strip = true

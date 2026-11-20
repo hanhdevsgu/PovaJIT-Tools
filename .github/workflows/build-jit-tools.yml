@@ -1,0 +1,186 @@
+name: Build Clean JIT Tools From Source
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  IDEVICE_REPO: https://github.com/jkcoxson/idevice.git
+  IDEVICE_COMMIT: 2dca9a58a9a1dd02ec7d6213fcfd8fe861e74132
+
+jobs:
+  build-windows-pairing:
+    name: Build Windows Pairing Tool (idevice_pair.exe)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout clean source
+        uses: actions/checkout@v4
+
+      - name: Audit zero prebuilt binaries in source tree
+        shell: pwsh
+        run: |
+          $forbidden = Get-ChildItem -Recurse -File -Path . | Where-Object {
+            $_.FullName -notmatch '\\\.git\\' -and
+            $_.Extension -in @('.a', '.dylib', '.so', '.dll', '.exe', '.car', '.lib', '.ipa', '.app', '.xcarchive')
+          }
+          if ($forbidden) {
+            Write-Error ("Prebuilt binary artifacts found in repo:`n" + ($forbidden.FullName -join "`n"))
+            exit 1
+          }
+          Write-Host "Audit OK: zero prebuilt binaries in source tree."
+
+      - name: Setup Rust stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Compile idevice_pair.exe from pure Rust source
+        shell: pwsh
+        run: |
+          rustc --version
+          cargo --version
+          cargo build --release --locked --manifest-path win-pairing-tool/Cargo.toml --bin idevice_pair --target x86_64-pc-windows-msvc
+
+      - name: Verify PE binary and compute SHA-256
+        shell: pwsh
+        run: |
+          $exe = "win-pairing-tool\target\x86_64-pc-windows-msvc\release\idevice_pair.exe"
+          if (-not (Test-Path $exe)) { throw "Missing $exe" }
+          $bytes = [System.IO.File]::ReadAllBytes($exe)
+          if ($bytes.Length -lt 1048576) { throw "Unexpected small executable size: $($bytes.Length)" }
+          if ($bytes[0] -ne 0x4D -or $bytes[1] -ne 0x5A) { throw "Invalid PE header (expected MZ)" }
+          New-Item -ItemType Directory -Force -Path staging | Out-Null
+          Copy-Item -Force $exe staging\Pova-idevice_pair.exe
+          $hash = (Get-FileHash staging\Pova-idevice_pair.exe -Algorithm SHA256).Hash
+          Write-Host "Built Pova-idevice_pair.exe size=$($bytes.Length) bytes SHA256=$hash"
+
+      - name: Upload Windows pairing artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Pova-idevice_pair-windows
+          path: staging/Pova-idevice_pair.exe
+          if-no-files-found: error
+          retention-days: 30
+
+  build-ios-stikdebug:
+    name: Build iOS JIT Enabler (Pova-StikDebug.ipa)
+    runs-on: macos-15
+    steps:
+      - name: Checkout clean source
+        uses: actions/checkout@v4
+
+      - name: Audit zero prebuilt binaries in source tree
+        run: |
+          set -euo pipefail
+          PREBUILT=$(find . -not -path './.git/*' -type f \( -name '*.a' -o -name '*.dylib' -o -name '*.so' -o -name '*.dll' -o -name '*.exe' -o -name '*.car' -o -name '*.lib' -o -name '*.ipa' -o -name '*.xcarchive' \))
+          if [ -n "$PREBUILT" ]; then
+            echo "ERROR: Prebuilt binary files detected in source tree:"
+            echo "$PREBUILT"
+            exit 1
+          fi
+          echo "Audit OK: zero prebuilt binaries in source tree (libidevice_ffi.a will be compiled from Rust source)."
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Setup Rust stable toolchain for iOS ARM64
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios
+
+      - name: Clone pinned jkcoxson/idevice source and audit zero prebuilt binaries
+        run: |
+          set -euo pipefail
+          rm -rf ../idevice-upstream
+          git clone --filter=blob:none "$IDEVICE_REPO" ../idevice-upstream
+          cd ../idevice-upstream
+          git checkout "$IDEVICE_COMMIT"
+          git log -1 --oneline
+          PREBUILT=$(find . -not -path './.git/*' -type f \( -name '*.a' -o -name '*.dylib' -o -name '*.so' -o -name '*.dll' -o -name '*.exe' \))
+          if [ -n "$PREBUILT" ]; then
+            echo "ERROR: Unexpected prebuilt binaries in jkcoxson/idevice:"
+            echo "$PREBUILT"
+            exit 1
+          fi
+
+      - name: Compile libidevice_ffi.a and generate idevice.h from Rust source
+        run: |
+          set -euo pipefail
+          cd ../idevice-upstream/ffi
+          SDK_PATH="$(xcrun --sdk iphoneos --show-sdk-path)"
+          DEV_DIR="$(xcode-select -p)"
+          export LIBCLANG_PATH="${DEV_DIR}/Toolchains/XcodeDefault.xctoolchain/usr/lib"
+          export BINDGEN_EXTRA_CLANG_ARGS="--sysroot=${SDK_PATH}"
+          export IPHONEOS_DEPLOYMENT_TARGET=17.0
+          echo "Xcode SDK: $SDK_PATH"
+          echo "rustc: $(rustc --version)"
+          LOCK_FLAG=""
+          if [ -f ../Cargo.lock ]; then
+            LOCK_FLAG="--locked"
+          fi
+          cargo build --release $LOCK_FLAG --target aarch64-apple-ios --features obfuscate
+
+          mkdir -p "${GITHUB_WORKSPACE}/ios-jit-enabler/StikDebug/idevice"
+          cp -f ../target/aarch64-apple-ios/release/libidevice_ffi.a \
+            "${GITHUB_WORKSPACE}/ios-jit-enabler/StikDebug/idevice/libidevice_ffi.a"
+          cp -f ./idevice.h \
+            "${GITHUB_WORKSPACE}/ios-jit-enabler/StikDebug/idevice/idevice.h"
+          ls -lh "${GITHUB_WORKSPACE}/ios-jit-enabler/StikDebug/idevice/"
+          lipo -info "${GITHUB_WORKSPACE}/ios-jit-enabler/StikDebug/idevice/libidevice_ffi.a"
+
+      - name: Generate Xcode project and pin SwiftPM dependencies
+        run: |
+          set -euo pipefail
+          cd ios-jit-enabler
+          xcodegen generate
+          if [ -f Package.resolved ]; then
+            mkdir -p StikDebug.xcodeproj/project.xcworkspace/xcshareddata/swiftpm
+            cp -f Package.resolved StikDebug.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+          fi
+
+      - name: Compile unsigned StikDebug xcarchive
+        run: |
+          set -euo pipefail
+          cd ios-jit-enabler
+          xcodebuild -version
+          xcodebuild -resolvePackageDependencies -project StikDebug.xcodeproj -scheme StikDebug
+          xcodebuild clean archive \
+            -project StikDebug.xcodeproj \
+            -scheme StikDebug \
+            -configuration Release \
+            -archivePath build/StikDebug.xcarchive \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            ONLY_ACTIVE_ARCH=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            IPHONEOS_DEPLOYMENT_TARGET=17.4
+
+      - name: Package and verify Pova-StikDebug.ipa
+        run: |
+          set -euo pipefail
+          cd ios-jit-enabler
+          APP_PATH="build/StikDebug.xcarchive/Products/Applications/StikDebug.app"
+          test -d "$APP_PATH"
+          file "$APP_PATH/StikDebug" | grep -q "arm64"
+          plutil -p "$APP_PATH/Info.plist"
+          grep -q "stikjit" "$APP_PATH/Info.plist" || plutil -convert xml1 -o - "$APP_PATH/Info.plist" | grep -q "stikjit"
+          test -f "$APP_PATH/Geode.js"
+          test -f "$APP_PATH/universal.js"
+          rm -rf Payload
+          mkdir -p Payload
+          cp -R "$APP_PATH" Payload/
+          zip -r Pova-StikDebug.ipa Payload
+          rm -rf Payload
+          shasum -a 256 Pova-StikDebug.ipa
+          ls -lh Pova-StikDebug.ipa
+
+      - name: Upload iOS JIT Enabler IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: Pova-StikDebug-ios
+          path: ios-jit-enabler/Pova-StikDebug.ipa
+          if-no-files-found: error
+          retention-days: 30
